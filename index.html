@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>打地鼠遊戲</title>
+  <style>
+    body {
+      text-align: center;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(#a0eaff, #fff8b5);
+    }
+    #cover {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #cover img {
+      max-width: 500px;
+      border-radius: 20px;
+      margin-top: 20px;
+    }
+    #game {
+      display: none;
+    }
+    #game-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #row-labels {
+      display: flex;
+      flex-direction: row;
+      margin-bottom: 4px;
+      margin-left: 64px;
+    }
+    .row-label {
+      width: 60px;
+      height: 24px;
+      text-align: center;
+      font-weight: bold;
+      line-height: 24px;
+    }
+    #column-labels {
+      display: flex;
+      flex-direction: column;
+      margin-right: 4px;
+    }
+    .column-label {
+      width: 24px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+    }
+    #grid-container {
+      display: flex;
+      flex-direction: row;
+    }
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
+      gap: 4px;
+      justify-content: center;
+      margin: 0 auto;
+    }
+    .cell {
+      width: 60px;
+      height: 60px;
+      background-color: #e0e0e0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #info {
+      margin: 10px;
+    }
+    button {
+      font-size: 16px;
+      padding: 8px 16px;
+      margin: 10px;
+      background-color: pink;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #message {
+      font-weight: bold;
+      color: green;
+      height: 24px;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="cover">
+    <img src="pic.webp" alt="封面圖" />
+    <button onclick="startGame()">開始遊戲</button>
+  </div>
+
+  <div id="game">
+    <div id="info">
+      <span id="score">分數: 0</span>
+      <span id="time">剩餘時間: 30s</span><br/>
+      <button onclick="pauseGame()">暫停</button>
+      <button onclick="resumeGame()">繼續</button>
+      <button onclick="resetGame()">重設</button>
+      <div id="message"></div>
+    </div>
+
+    <div id="game-area">
+      <div id="row-labels">
+        <div class="row-label">0</div>
+        <div class="row-label">1</div>
+        <div class="row-label">2</div>
+        <div class="row-label">3</div>
+        <div class="row-label">4</div>
+        <div class="row-label">5</div>
+        <div class="row-label">6</div>
+        <div class="row-label">7</div>
+      </div>
+      <div id="grid-container">
+        <div id="column-labels">
+          <div class="column-label">0</div>
+          <div class="column-label">1</div>
+          <div class="column-label">2</div>
+          <div class="column-label">3</div>
+          <div class="column-label">4</div>
+          <div class="column-label">5</div>
+          <div class="column-label">6</div>
+          <div class="column-label">7</div>
+        </div>
+        <div>
+          <div id="grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <audio id="bg-music" src="background_music.mp3" loop></audio>
+  <audio id="hit-sound" src="hit_sound.wav"></audio>
+
+  <script>
+    const GRID_SIZE = 8;
+    const GAME_DURATION = 30;
+    const MOLE_INTERVAL = 2500;
+
+    const grid = document.getElementById('grid');
+    const scoreSpan = document.getElementById('score');
+    const timeSpan = document.getElementById('time');
+    const bgMusic = document.getElementById('bg-music');
+    const hitSound = document.getElementById('hit-sound');
+    const messageBox = document.getElementById('message');
+
+    let molePos = -1;
+    let score = 0;
+    let timeLeft = GAME_DURATION;
+    let gameInterval = null;
+    let countdownTimer = null;
+    let isPaused = false;
+
+    function startGame() {
+      document.getElementById('cover').style.display = 'none';
+      document.getElementById('game').style.display = 'block';
+      bgMusic.volume = 0.2;
+      bgMusic.play();
+      createGrid();
+      resetGame();
+    }
+
+    function createGrid() {
+      grid.innerHTML = '';
+      for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.index = i;
+        cell.addEventListener('click', onCellClick);
+        grid.appendChild(cell);
+      }
+    }
+
+    function onCellClick(e) {
+      if (!gameInterval || isPaused) return;
+      const index = parseInt(e.currentTarget.dataset.index);
+      const x = index % GRID_SIZE;
+      const y = Math.floor(index / GRID_SIZE);
+
+      if (index === molePos) {
+        score++;
+        scoreSpan.textContent = `分數: ${score}`;
+        hitSound.play();
+        messageBox.textContent = `命中！+1 (${x}, ${y})`;
+        setTimeout(() => messageBox.textContent = '', 1000);
+        moveMole();
+      } else {
+        messageBox.textContent = `沒打中！(${x}, ${y})`;
+        setTimeout(() => messageBox.textContent = '', 1000);
+      }
+    }
+
+    function moveMole() {
+      const cells = document.querySelectorAll('.cell');
+      cells.forEach(cell => cell.textContent = '');
+      molePos = Math.floor(Math.random() * GRID_SIZE * GRID_SIZE);
+      cells[molePos].textContent = '🐹';
+    }
+
+    function resetGame() {
+      score = 0;
+      timeLeft = GAME_DURATION;
+      scoreSpan.textContent = `分數: ${score}`;
+      timeSpan.textContent = `剩餘時間: ${timeLeft}s`;
+      isPaused = false;
+      moveMole();
+
+      if (gameInterval) clearInterval(gameInterval);
+      if (countdownTimer) clearInterval(countdownTimer);
+
+      gameInterval = setInterval(() => {
+        if (!isPaused) moveMole();
+      }, MOLE_INTERVAL);
+
+      countdownTimer = setInterval(() => {
+        if (!isPaused) {
+          timeLeft--;
+          timeSpan.textContent = `剩餘時間: ${timeLeft}s`;
+          if (timeLeft <= 0) {
+            clearInterval(gameInterval);
+            clearInterval(countdownTimer);
+            bgMusic.pause();
+            alert(`遊戲結束！你的分數是 ${score}`);
+          }
+        }
+      }, 1000);
+    }
+
+    function pauseGame() {
+      isPaused = true;
+      bgMusic.pause();
+    }
+
+    function resumeGame() {
+      if (timeLeft > 0) {
+        isPaused = false;
+        bgMusic.play();
+      }
+    }
+  </script>
+</body>
+</html>
